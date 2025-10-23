@@ -1,69 +1,156 @@
-<script>
-  const button = document.getElementById("listenBtn");
-  const result = document.getElementById("result");
-  const voiceSelect = document.getElementById("voiceSelect");
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OCD Logistics DNA – Voice Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 40px;
+      background-color: #f8fafc;
+    }
+    h1 {
+      color: #0d6efd;
+    }
+    #result {
+      margin-top: 30px;
+      font-size: 1.3em;
+      color: #333;
+      white-space: pre-line;
+    }
+    button {
+      background-color: #0d6efd;
+      color: white;
+      border: none;
+      padding: 14px 26px;
+      font-size: 1.1em;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+    button:hover {
+      background-color: #084298;
+    }
+    select {
+      margin-top: 20px;
+      padding: 10px;
+      font-size: 1em;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>OCD Logistics DNA</h1>
+  <p>Press the button and speak. The app will repeat what you say.</p>
 
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const synth = window.speechSynthesis;
-  let selectedVoice = null;
+  <label for="voiceSelect"><strong>Choose Voice:</strong></label>
+  <br />
+  <select id="voiceSelect"></select>
 
-  function populateVoices() {
-    const voices = synth.getVoices();
-    if (!voices.length) {
-      // Try again shortly if voices not yet loaded
-      setTimeout(populateVoices, 200);
-      return;
+  <br />
+  <button id="listenBtn">Start Listening</button>
+  <div id="result"></div>
+
+  <script>
+    const button = document.getElementById("listenBtn");
+    const result = document.getElementById("result");
+    const voiceSelect = document.getElementById("voiceSelect");
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const synth = window.speechSynthesis;
+    let selectedVoice = null;
+
+    // --- Load and refresh available voices ---
+    function populateVoices() {
+      const voices = synth.getVoices();
+      if (!voices.length) {
+        setTimeout(populateVoices, 200);
+        return;
+      }
+      voiceSelect.innerHTML = "";
+      voices.forEach((v, i) => {
+        const opt = document.createElement("option");
+        opt.value = i;
+        opt.textContent = `${v.name} (${v.lang})`;
+        voiceSelect.appendChild(opt);
+      });
+      const ukIndex = voices.findIndex(v => v.lang === "en-GB");
+      voiceSelect.value = ukIndex >= 0 ? ukIndex : 0;
+      selectedVoice = voices[voiceSelect.value];
     }
 
-    voiceSelect.innerHTML = "";
-    voices.forEach((voice, i) => {
-      const option = document.createElement("option");
-      option.value = i;
-      option.textContent = `${voice.name} (${voice.lang})`;
-      voiceSelect.appendChild(option);
+    synth.onvoiceschanged = populateVoices;
+    populateVoices();
+
+    voiceSelect.addEventListener("change", () => {
+      const voices = synth.getVoices();
+      selectedVoice = voices[voiceSelect.value];
     });
 
-    // Auto-select an English (UK) voice if possible
-    const ukVoiceIndex = voices.findIndex(v => v.lang === "en-GB");
-    voiceSelect.value = ukVoiceIndex >= 0 ? ukVoiceIndex : 0;
-    selectedVoice = voices[voiceSelect.value];
-  }
+    // --- Speech recognition setup ---
+    if (!SpeechRecognition) {
+      result.textContent = "Speech recognition not supported on this device.";
+      button.disabled = true;
+    } else {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-GB";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
 
-  // Load voices on page load and when available
-  populateVoices();
-  synth.onvoiceschanged = populateVoices;
+      button.addEventListener("click", () => {
+        result.textContent = "Listening...";
+        recognition.start();
+      });
 
-  voiceSelect.addEventListener("change", () => {
-    const voices = synth.getVoices();
-    selectedVoice = voices[voiceSelect.value];
-  });
+      recognition.onresult = async (event) => {
+        const transcript = event.results[0][0].transcript;
+        result.textContent = "You said: " + transcript;
 
-  if (!SpeechRecognition) {
-    result.textContent = "Speech recognition not supported on this device.";
-    button.disabled = true;
-  } else {
-    const recognition = new SpeechRecognition();
-    recognition.lang = "en-GB";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
+        // --- send text to DNA GPT for a reply ---
+        const reply = await getDNAReply(transcript);
+        result.textContent += "\nDNA: " + reply;
 
-    button.addEventListener("click", () => {
-      result.textContent = "Listening...";
-      recognition.start();
-      // Trigger voices load if not yet populated
-      if (!synth.getVoices().length) populateVoices();
-    });
+        // Speak reply aloud
+        const utter = new SpeechSynthesisUtterance(reply);
+        if (selectedVoice) utter.voice = selectedVoice;
+        synth.speak(utter);
+      };
 
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      result.textContent = "You said: " + transcript;
-      const utter = new SpeechSynthesisUtterance("You said: " + transcript);
-      if (selectedVoice) utter.voice = selectedVoice;
-      synth.speak(utter);
-    };
+      recognition.onerror = (event) => {
+        result.textContent = "Error: " + event.error;
+      };
+    }
 
-    recognition.onerror = (event) => {
-      result.textContent = "Error: " + event.error;
-    };
-  }
-</script>
+    // --- Connect to GPT (temporary direct call) ---
+    async function getDNAReply(message) {
+      const apiKey = "YOUR_OPENAI_API_KEY"; // ⚠️ Replace with proxy endpoint later
+      const url = "https://api.openai.com/v1/chat/completions";
+      const payload = {
+        model: "gpt-5",
+        messages: [
+          { role: "system", content: "You are DNA, a calm, hands-free delivery assistant for drivers from OCD Logistics." },
+          { role: "user", content: message }
+        ]
+      };
+
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+          },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content || "No reply.";
+      } catch (err) {
+        console.error(err);
+        return "Connection error.";
+      }
+    }
+  </script>
+</body>
+</html>
