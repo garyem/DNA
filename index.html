@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OCD Logistics DNA – Voice Test</title>
+  <title>OCD Logistics DNA – Voice Assistant</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -43,7 +43,7 @@
 </head>
 <body>
   <h1>OCD Logistics DNA</h1>
-  <p>Press the button and speak. The app will repeat what you say.</p>
+  <p>Press the button once to start. DNA will then listen and reply automatically.</p>
 
   <label for="voiceSelect"><strong>Choose Voice:</strong></label>
   <br />
@@ -62,13 +62,10 @@
     const synth = window.speechSynthesis;
     let selectedVoice = null;
 
-    // --- Load and refresh available voices ---
+    // --- Load available voices ---
     function populateVoices() {
       const voices = synth.getVoices();
-      if (!voices.length) {
-        setTimeout(populateVoices, 200);
-        return;
-      }
+      if (!voices.length) return setTimeout(populateVoices, 200);
       voiceSelect.innerHTML = "";
       voices.forEach((v, i) => {
         const opt = document.createElement("option");
@@ -80,7 +77,6 @@
       voiceSelect.value = ukIndex >= 0 ? ukIndex : 0;
       selectedVoice = voices[voiceSelect.value];
     }
-
     synth.onvoiceschanged = populateVoices;
     populateVoices();
 
@@ -98,39 +94,44 @@
       recognition.lang = "en-GB";
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
+      recognition.continuous = true; // keep listening
 
       button.addEventListener("click", () => {
-        result.textContent = "Listening...";
+        result.textContent = "Listening continuously...";
         recognition.start();
       });
 
       recognition.onresult = async (event) => {
-        const transcript = event.results[0][0].transcript;
+        const transcript = event.results[event.results.length - 1][0].transcript;
         result.textContent = "You said: " + transcript;
 
-        // --- send text to DNA GPT via Render proxy ---
         const reply = await getDNAReply(transcript);
         result.textContent += "\nDNA: " + reply;
 
-        // Speak reply aloud
         const utter = new SpeechSynthesisUtterance(reply);
         if (selectedVoice) utter.voice = selectedVoice;
         synth.speak(utter);
       };
 
-      recognition.onerror = (event) => {
-        result.textContent = "Error: " + event.error;
+      recognition.onerror = (e) => {
+        console.error("Speech error:", e);
+        result.textContent = "Error: " + e.error;
+      };
+
+      recognition.onend = () => {
+        // Automatically restart to stay awake
+        recognition.start();
       };
     }
 
-    // --- Secure GPT connection through your Render proxy ---
+    // --- Secure GPT connection through Render proxy ---
     async function getDNAReply(message) {
-      const url = "https://dna-proxy.onrender.com/api/chat"; // your live proxy URL
+      const url = "https://dna-proxy.onrender.com/api/chat";
       try {
         const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message })
+          body: JSON.stringify({ message, model: "gpt-4o-mini" })
         });
         const data = await res.json();
         return data.reply || "No reply.";
