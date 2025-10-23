@@ -27,71 +27,89 @@
       font-size: 1.1em;
       border-radius: 10px;
       cursor: pointer;
+      margin-top: 20px;
     }
     button:hover {
       background-color: #084298;
+    }
+    select {
+      margin-top: 20px;
+      padding: 10px;
+      font-size: 1em;
+      border-radius: 8px;
     }
   </style>
 </head>
 <body>
   <h1>OCD Logistics DNA</h1>
-  <p>Press the button and speak. The app will read your words back to you.</p>
+  <p>Press the button and speak. The app will repeat what you say.</p>
+
+  <label for="voiceSelect"><strong>Choose Voice:</strong></label>
+  <br />
+  <select id="voiceSelect"></select>
+
+  <br />
   <button id="listenBtn">Start Listening</button>
   <div id="result"></div>
 
-<script>
-  const button = document.getElementById("listenBtn");
-  const result = document.getElementById("result");
+  <script>
+    const button = document.getElementById("listenBtn");
+    const result = document.getElementById("result");
+    const voiceSelect = document.getElementById("voiceSelect");
 
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const synth = window.speechSynthesis;
-  let selectedVoice = null;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const synth = window.speechSynthesis;
+    let selectedVoice = null;
 
-  // Get available voices
-  function loadVoices() {
-    const voices = synth.getVoices();
-    // Try to find a UK English voice
-    selectedVoice =
-      voices.find(v => v.lang === "en-GB") ||
-      voices.find(v => v.lang.startsWith("en")) ||
-      voices[0];
-  }
+    // Load available voices into dropdown
+    function loadVoices() {
+      const voices = synth.getVoices();
+      voiceSelect.innerHTML = "";
+      voices.forEach((voice, i) => {
+        const option = document.createElement("option");
+        option.value = i;
+        option.textContent = `${voice.name} (${voice.lang})`;
+        voiceSelect.appendChild(option);
+      });
+      // Pre-select a UK voice if available
+      const ukVoiceIndex = voices.findIndex(v => v.lang === "en-GB");
+      if (ukVoiceIndex >= 0) voiceSelect.value = ukVoiceIndex;
+      selectedVoice = voices[voiceSelect.value];
+    }
 
-  if (synth.onvoiceschanged !== undefined) {
     synth.onvoiceschanged = loadVoices;
-  }
-  loadVoices();
 
-  if (!SpeechRecognition) {
-    result.textContent = "Speech recognition not supported on this device.";
-    button.disabled = true;
-  } else {
-    const recognition = new SpeechRecognition();
-    recognition.lang = "en-GB";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    button.addEventListener("click", () => {
-      result.textContent = "Listening...";
-      recognition.start();
+    voiceSelect.addEventListener("change", () => {
+      const voices = synth.getVoices();
+      selectedVoice = voices[voiceSelect.value];
     });
 
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      result.textContent = "You said: " + transcript;
-      const utter = new SpeechSynthesisUtterance("You said: " + transcript);
-      if (selectedVoice) utter.voice = selectedVoice;
-      synth.speak(utter);
-    };
+    if (!SpeechRecognition) {
+      result.textContent = "Speech recognition not supported on this device.";
+      button.disabled = true;
+    } else {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-GB";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
 
-    recognition.onerror = (event) => {
-      result.textContent = "Error: " + event.error;
-    };
-  }
-</script>
+      button.addEventListener("click", () => {
+        result.textContent = "Listening...";
+        recognition.start();
+      });
 
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        result.textContent = "You said: " + transcript;
+        const utter = new SpeechSynthesisUtterance("You said: " + transcript);
+        if (selectedVoice) utter.voice = selectedVoice;
+        synth.speak(utter);
+      };
+
+      recognition.onerror = (event) => {
+        result.textContent = "Error: " + event.error;
+      };
+    }
+  </script>
 </body>
 </html>
-
-
-
