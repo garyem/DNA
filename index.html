@@ -108,7 +108,7 @@
         const transcript = event.results[0][0].transcript;
         result.textContent = "You said: " + transcript;
 
-        // --- send text to DNA GPT for a reply ---
+        // --- send text to DNA GPT via Render proxy ---
         const reply = await getDNAReply(transcript);
         result.textContent += "\nDNA: " + reply;
 
@@ -123,31 +123,19 @@
       };
     }
 
-    // --- Connect to GPT (temporary direct call) ---
+    // --- Secure GPT connection through your Render proxy ---
     async function getDNAReply(message) {
-      const apiKey = "YOUR_OPENAI_API_KEY"; // ⚠️ Replace with proxy endpoint later
-      const url = "https://api.openai.com/v1/chat/completions";
-      const payload = {
-        model: "gpt-5",
-        messages: [
-          { role: "system", content: "You are DNA, a calm, hands-free delivery assistant for drivers from OCD Logistics." },
-          { role: "user", content: message }
-        ]
-      };
-
+      const url = "https://dna-proxy.onrender.com/api/chat"; // your live proxy URL
       try {
         const res = await fetch(url, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`
-          },
-          body: JSON.stringify(payload)
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message })
         });
         const data = await res.json();
-        return data.choices?.[0]?.message?.content || "No reply.";
+        return data.reply || "No reply.";
       } catch (err) {
-        console.error(err);
+        console.error("Proxy error:", err);
         return "Connection error.";
       }
     }
