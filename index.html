@@ -1,115 +1,69 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OCD Logistics DNA – Voice Test</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 40px;
-      background-color: #f8fafc;
-    }
-    h1 {
-      color: #0d6efd;
-    }
-    #result {
-      margin-top: 30px;
-      font-size: 1.3em;
-      color: #333;
-    }
-    button {
-      background-color: #0d6efd;
-      color: white;
-      border: none;
-      padding: 14px 26px;
-      font-size: 1.1em;
-      border-radius: 10px;
-      cursor: pointer;
-      margin-top: 20px;
-    }
-    button:hover {
-      background-color: #084298;
-    }
-    select {
-      margin-top: 20px;
-      padding: 10px;
-      font-size: 1em;
-      border-radius: 8px;
-    }
-  </style>
-</head>
-<body>
-  <h1>OCD Logistics DNA</h1>
-  <p>Press the button and speak. The app will repeat what you say.</p>
+<script>
+  const button = document.getElementById("listenBtn");
+  const result = document.getElementById("result");
+  const voiceSelect = document.getElementById("voiceSelect");
 
-  <label for="voiceSelect"><strong>Choose Voice:</strong></label>
-  <br />
-  <select id="voiceSelect"></select>
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const synth = window.speechSynthesis;
+  let selectedVoice = null;
 
-  <br />
-  <button id="listenBtn">Start Listening</button>
-  <div id="result"></div>
-
-  <script>
-    const button = document.getElementById("listenBtn");
-    const result = document.getElementById("result");
-    const voiceSelect = document.getElementById("voiceSelect");
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const synth = window.speechSynthesis;
-    let selectedVoice = null;
-
-    // Load available voices into dropdown
-    function loadVoices() {
-      const voices = synth.getVoices();
-      voiceSelect.innerHTML = "";
-      voices.forEach((voice, i) => {
-        const option = document.createElement("option");
-        option.value = i;
-        option.textContent = `${voice.name} (${voice.lang})`;
-        voiceSelect.appendChild(option);
-      });
-      // Pre-select a UK voice if available
-      const ukVoiceIndex = voices.findIndex(v => v.lang === "en-GB");
-      if (ukVoiceIndex >= 0) voiceSelect.value = ukVoiceIndex;
-      selectedVoice = voices[voiceSelect.value];
+  function populateVoices() {
+    const voices = synth.getVoices();
+    if (!voices.length) {
+      // Try again shortly if voices not yet loaded
+      setTimeout(populateVoices, 200);
+      return;
     }
 
-    synth.onvoiceschanged = loadVoices;
-
-    voiceSelect.addEventListener("change", () => {
-      const voices = synth.getVoices();
-      selectedVoice = voices[voiceSelect.value];
+    voiceSelect.innerHTML = "";
+    voices.forEach((voice, i) => {
+      const option = document.createElement("option");
+      option.value = i;
+      option.textContent = `${voice.name} (${voice.lang})`;
+      voiceSelect.appendChild(option);
     });
 
-    if (!SpeechRecognition) {
-      result.textContent = "Speech recognition not supported on this device.";
-      button.disabled = true;
-    } else {
-      const recognition = new SpeechRecognition();
-      recognition.lang = "en-GB";
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
+    // Auto-select an English (UK) voice if possible
+    const ukVoiceIndex = voices.findIndex(v => v.lang === "en-GB");
+    voiceSelect.value = ukVoiceIndex >= 0 ? ukVoiceIndex : 0;
+    selectedVoice = voices[voiceSelect.value];
+  }
 
-      button.addEventListener("click", () => {
-        result.textContent = "Listening...";
-        recognition.start();
-      });
+  // Load voices on page load and when available
+  populateVoices();
+  synth.onvoiceschanged = populateVoices;
 
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        result.textContent = "You said: " + transcript;
-        const utter = new SpeechSynthesisUtterance("You said: " + transcript);
-        if (selectedVoice) utter.voice = selectedVoice;
-        synth.speak(utter);
-      };
+  voiceSelect.addEventListener("change", () => {
+    const voices = synth.getVoices();
+    selectedVoice = voices[voiceSelect.value];
+  });
 
-      recognition.onerror = (event) => {
-        result.textContent = "Error: " + event.error;
-      };
-    }
-  </script>
-</body>
-</html>
+  if (!SpeechRecognition) {
+    result.textContent = "Speech recognition not supported on this device.";
+    button.disabled = true;
+  } else {
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-GB";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    button.addEventListener("click", () => {
+      result.textContent = "Listening...";
+      recognition.start();
+      // Trigger voices load if not yet populated
+      if (!synth.getVoices().length) populateVoices();
+    });
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      result.textContent = "You said: " + transcript;
+      const utter = new SpeechSynthesisUtterance("You said: " + transcript);
+      if (selectedVoice) utter.voice = selectedVoice;
+      synth.speak(utter);
+    };
+
+    recognition.onerror = (event) => {
+      result.textContent = "Error: " + event.error;
+    };
+  }
+</script>
