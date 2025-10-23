@@ -40,39 +40,56 @@
   <div id="result"></div>
 
   <script>
-    const button = document.getElementById("listenBtn");
-    const result = document.getElementById("result");
+  const button = document.getElementById("listenBtn");
+  const result = document.getElementById("result");
 
-    // Check browser support
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const synth = window.speechSynthesis;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const synth = window.speechSynthesis;
+  let selectedVoice = null;
 
-    if (!SpeechRecognition) {
-      result.textContent = "Speech recognition not supported on this device.";
-      button.disabled = true;
-    } else {
-      const recognition = new SpeechRecognition();
-      recognition.lang = "en-GB";
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
+  // Get available voices
+  function loadVoices() {
+    const voices = synth.getVoices();
+    // Try to find a UK English voice
+    selectedVoice =
+      voices.find(v => v.lang === "en-GB") ||
+      voices.find(v => v.lang.startsWith("en")) ||
+      voices[0];
+  }
 
-      button.addEventListener("click", () => {
-        result.textContent = "Listening...";
-        recognition.start();
-      });
+  if (synth.onvoiceschanged !== undefined) {
+    synth.onvoiceschanged = loadVoices;
+  }
+  loadVoices();
 
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        result.textContent = "You said: " + transcript;
-        const utter = new SpeechSynthesisUtterance("You said: " + transcript);
-        synth.speak(utter);
-      };
+  if (!SpeechRecognition) {
+    result.textContent = "Speech recognition not supported on this device.";
+    button.disabled = true;
+  } else {
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-GB";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
 
-      recognition.onerror = (event) => {
-        result.textContent = "Error: " + event.error;
-      };
-    }
-  </script>
+    button.addEventListener("click", () => {
+      result.textContent = "Listening...";
+      recognition.start();
+    });
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      result.textContent = "You said: " + transcript;
+      const utter = new SpeechSynthesisUtterance("You said: " + transcript);
+      if (selectedVoice) utter.voice = selectedVoice;
+      synth.speak(utter);
+    };
+
+    recognition.onerror = (event) => {
+      result.textContent = "Error: " + event.error;
+    };
+  }
+</script>
 </body>
 </html>
+
 
