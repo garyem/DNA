@@ -43,7 +43,7 @@
 </head>
 <body>
   <h1>OCD Logistics DNA</h1>
-  <p>Press the button once to start. DNA will then listen and reply automatically.</p>
+  <p>Press the button once to start. Say “stop listening” to pause.</p>
 
   <label for="voiceSelect"><strong>Choose Voice:</strong></label>
   <br />
@@ -61,6 +61,7 @@
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const synth = window.speechSynthesis;
     let selectedVoice = null;
+    let listeningEnabled = true;
 
     // --- Load available voices ---
     function populateVoices() {
@@ -94,17 +95,31 @@
       recognition.lang = "en-GB";
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
-      recognition.continuous = true; // keep listening
+      recognition.continuous = true;
 
       button.addEventListener("click", () => {
-        result.textContent = "Listening continuously...";
+        result.textContent = "Listening continuously... Say 'stop listening' to pause.";
+        listeningEnabled = true;
         recognition.start();
       });
 
       recognition.onresult = async (event) => {
-        const transcript = event.results[event.results.length - 1][0].transcript;
+        const transcript = event.results[event.results.length - 1][0].transcript.trim();
         result.textContent = "You said: " + transcript;
 
+        // --- Voice command: stop listening ---
+        if (/stop listening/i.test(transcript)) {
+          listeningEnabled = false;
+          synth.cancel();           // stop any ongoing speech
+          recognition.onend = null; // disable auto-restart
+          recognition.stop();       // fully stop mic
+          result.textContent = "Stopped by voice command. Tap 'Start Listening' to resume.";
+          return;
+        }
+
+        if (!listeningEnabled) return;
+
+        // --- send text to DNA GPT via Render proxy ---
         const reply = await getDNAReply(transcript);
         result.textContent += "\nDNA: " + reply;
 
@@ -119,14 +134,17 @@
       };
 
       recognition.onend = () => {
-        // Automatically restart to stay awake
-        recognition.start();
+        if (listeningEnabled) {
+          recognition.start();
+        } else {
+          console.log("Listening stopped manually.");
+        }
       };
     }
 
     // --- Secure GPT connection through Render proxy ---
     async function getDNAReply(message) {
-      const url = "https://dna-proxy.onrender.com/api/chat";
+      const url = "https://dna-proxy.onrender.com/api/chat"; // your live proxy
       try {
         const res = await fetch(url, {
           method: "POST",
