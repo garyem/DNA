@@ -21,8 +21,6 @@
       white-space: pre-line;
     }
     button {
-      background-color: #0d6efd;
-      color: white;
       border: none;
       padding: 14px 26px;
       font-size: 1.1em;
@@ -30,8 +28,20 @@
       cursor: pointer;
       margin-top: 20px;
     }
-    button:hover {
+    #listenBtn {
+      background-color: #0d6efd;
+      color: white;
+    }
+    #listenBtn:hover {
       background-color: #084298;
+    }
+    #stopBtn {
+      background-color: #dc3545;
+      color: white;
+      margin-left: 10px;
+    }
+    #stopBtn:hover {
+      background-color: #a71d2a;
     }
     select {
       margin-top: 20px;
@@ -43,7 +53,7 @@
 </head>
 <body>
   <h1>OCD Logistics DNA</h1>
-  <p>Press the button once to start. Say “stop listening” to pause.</p>
+  <p>Press <strong>Start Listening</strong> once to begin. Use the <strong>Stop Listening</strong> button to silence DNA anytime.</p>
 
   <label for="voiceSelect"><strong>Choose Voice:</strong></label>
   <br />
@@ -51,10 +61,12 @@
 
   <br />
   <button id="listenBtn">Start Listening</button>
+  <button id="stopBtn">Stop Listening</button>
   <div id="result"></div>
 
   <script>
-    const button = document.getElementById("listenBtn");
+    const listenBtn = document.getElementById("listenBtn");
+    const stopBtn = document.getElementById("stopBtn");
     const result = document.getElementById("result");
     const voiceSelect = document.getElementById("voiceSelect");
 
@@ -86,10 +98,10 @@
       selectedVoice = voices[voiceSelect.value];
     });
 
-    // --- Speech recognition setup ---
     if (!SpeechRecognition) {
       result.textContent = "Speech recognition not supported on this device.";
-      button.disabled = true;
+      listenBtn.disabled = true;
+      stopBtn.disabled = true;
     } else {
       const recognition = new SpeechRecognition();
       recognition.lang = "en-GB";
@@ -97,29 +109,26 @@
       recognition.maxAlternatives = 1;
       recognition.continuous = true;
 
-      button.addEventListener("click", () => {
-        result.textContent = "Listening continuously... Say 'stop listening' to pause.";
+      listenBtn.addEventListener("click", () => {
+        result.textContent = "Listening... Say commands or tap Stop to pause.";
         listeningEnabled = true;
         recognition.start();
+      });
+
+      stopBtn.addEventListener("click", () => {
+        listeningEnabled = false;
+        recognition.onend = null;
+        recognition.stop();  // stop mic
+        synth.cancel();       // stop any speech
+        result.textContent = "Stopped listening.";
       });
 
       recognition.onresult = async (event) => {
         const transcript = event.results[event.results.length - 1][0].transcript.trim();
         result.textContent = "You said: " + transcript;
-
-        // --- Voice command: stop listening ---
-        if (/stop listening/i.test(transcript)) {
-          listeningEnabled = false;
-          synth.cancel();           // stop any ongoing speech
-          recognition.onend = null; // disable auto-restart
-          recognition.stop();       // fully stop mic
-          result.textContent = "Stopped by voice command. Tap 'Start Listening' to resume.";
-          return;
-        }
-
         if (!listeningEnabled) return;
 
-        // --- send text to DNA GPT via Render proxy ---
+        // --- Send to DNA GPT via Render proxy ---
         const reply = await getDNAReply(transcript);
         result.textContent += "\nDNA: " + reply;
 
@@ -134,17 +143,12 @@
       };
 
       recognition.onend = () => {
-        if (listeningEnabled) {
-          recognition.start();
-        } else {
-          console.log("Listening stopped manually.");
-        }
+        if (listeningEnabled) recognition.start();
       };
     }
 
-    // --- Secure GPT connection through Render proxy ---
     async function getDNAReply(message) {
-      const url = "https://dna-proxy.onrender.com/api/chat"; // your live proxy
+      const url = "https://dna-proxy.onrender.com/api/chat";
       try {
         const res = await fetch(url, {
           method: "POST",
